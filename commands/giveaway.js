@@ -86,16 +86,25 @@ module.exports = {
             };
 
             client.giveaways.set(message.id, giveawayData);
-            saveData(client);
-
-            setTimeout(() => endGiveaway(message.id, client), duration * 60 * 1000);
+            await saveData(client);
 
             await interaction.reply({ content: `Giveaway created in ${channel}!`, ephemeral: true });
 
         } else if (subcommand === 'end') {
             const messageId = interaction.options.getString('messageid');
-            await endGiveaway(messageId, client);
-            await interaction.reply({ content: 'Giveaway ended!', ephemeral: true });
+            const giveaway = client.giveaways.get(messageId);
+
+            if (!giveaway) {
+                return interaction.reply({ content: 'Giveaway not found!', ephemeral: true });
+            }
+
+            if (giveaway.ended) {
+                return interaction.reply({ content: 'This giveaway has already ended!', ephemeral: true });
+            }
+
+            // Trigger immediate end by emitting an event
+            interaction.client.emit('endGiveaway', messageId);
+            await interaction.reply({ content: 'Ending giveaway...', ephemeral: true });
 
         } else if (subcommand === 'reroll') {
             const messageId = interaction.options.getString('messageid');
@@ -122,49 +131,11 @@ module.exports = {
     }
 };
 
-async function endGiveaway(messageId, client) {
-    const giveaway = client.giveaways.get(messageId);
-    
-    if (!giveaway || giveaway.ended) return;
-
-    giveaway.ended = true;
-    client.giveaways.set(messageId, giveaway);
-
-    try {
-        const channel = await client.channels.fetch(giveaway.channelId);
-        const message = await channel.messages.fetch(messageId);
-
-        if (giveaway.participants.length === 0) {
-            await channel.send('Giveaway ended! No valid entries.');
-            return;
-        }
-
-        const winnerCount = Math.min(giveaway.winners, giveaway.participants.length);
-        const winners = [];
-        const participantsCopy = [...giveaway.participants];
-
-        for (let i = 0; i < winnerCount; i++) {
-            const randomIndex = Math.floor(Math.random() * participantsCopy.length);
-            winners.push(participantsCopy[randomIndex]);
-            participantsCopy.splice(randomIndex, 1);
-        }
-
-        const embed = new EmbedBuilder()
-            .setColor('#00FF00')
-            .setTitle('🎉 GIVEAWAY ENDED 🎉')
-            .setDescription(`**Prize:** ${giveaway.prize}\n**Winners:** ${winners.map(w => `<@${w}>`).join(', ')}`)
-            .setTimestamp();
-
-        await message.edit({ embeds: [embed], components: [] });
-        await channel.send(`🎉 Congratulations ${winners.map(w => `<@${w}>`).join(', ')}! You won **${giveaway.prize}**!`);
-
-        saveData(client);
-    } catch (error) {
-        console.error('Error ending giveaway:', error);
-    }
-}
-
-function saveData(client) {
+async function saveData(client) {
     const dataDir = path.join(__dirname, '..', 'data');
-    fs.writeFileSync(path.join(dataDir, 'giveaways.json'), JSON.stringify(Object.fromEntries(client.giveaways), null, 2));
+    try {
+        await fs.promises.writeFile(path.join(dataDir, 'giveaways.json'), JSON.stringify(Object.fromEntries(client.giveaways), null, 2));
+    } catch (error) {
+        console.error('Error saving giveaway data:', error);
+    }
 }

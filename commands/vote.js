@@ -68,53 +68,22 @@ module.exports = {
             options,
             author: interaction.user.id,
             timestamp: Date.now(),
-            duration
+            duration,
+            ended: false
         };
 
         client.votes.set(message.id, voteData);
-        saveData(client);
-
-        if (duration) {
-            setTimeout(() => endVote(message.id, client), duration * 60 * 1000);
-        }
+        await saveData(client);
 
         await interaction.reply({ content: `Vote created in ${channel}!`, ephemeral: true });
     }
 };
 
-async function endVote(messageId, client) {
-    const voteData = client.votes.get(messageId);
-    if (!voteData) return;
-
-    try {
-        const channel = await client.channels.fetch(voteData.channelId);
-        const message = await channel.messages.fetch(messageId);
-
-        const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-        const results = [];
-
-        for (let i = 0; i < voteData.options.length; i++) {
-            const reaction = message.reactions.cache.get(emojis[i]);
-            const count = reaction ? reaction.count - 1 : 0; // Subtract bot's reaction
-            results.push({ option: voteData.options[i], count });
-        }
-
-        results.sort((a, b) => b.count - a.count);
-
-        const embed = new EmbedBuilder()
-            .setColor('#00FF00')
-            .setTitle(`📊 ${voteData.question} - RESULTS`)
-            .setDescription(results.map(r => `**${r.option}**: ${r.count} vote(s)`).join('\n'))
-            .setFooter({ text: 'Vote ended' })
-            .setTimestamp();
-
-        await channel.send({ embeds: [embed] });
-    } catch (error) {
-        console.error('Error ending vote:', error);
-    }
-}
-
-function saveData(client) {
+async function saveData(client) {
     const dataDir = path.join(__dirname, '..', 'data');
-    fs.writeFileSync(path.join(dataDir, 'votes.json'), JSON.stringify(Object.fromEntries(client.votes), null, 2));
+    try {
+        await fs.promises.writeFile(path.join(dataDir, 'votes.json'), JSON.stringify(Object.fromEntries(client.votes), null, 2));
+    } catch (error) {
+        console.error('Error saving vote data:', error);
+    }
 }

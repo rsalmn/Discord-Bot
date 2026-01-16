@@ -63,7 +63,7 @@ module.exports = {
             };
 
             client.reactionRoles.set(message.id, reactionRoleData);
-            saveData(client);
+            await saveData(client);
 
             await interaction.reply({ content: `Reaction role message created! Use \`/reactionrole add\` to add roles.\nMessage ID: ${message.id}`, ephemeral: true });
 
@@ -89,7 +89,7 @@ module.exports = {
                 });
 
                 client.reactionRoles.set(messageId, reactionRoleData);
-                saveData(client);
+                await saveData(client);
 
                 await interaction.reply({ content: `Reaction role added! ${emoji} → ${role}`, ephemeral: true });
             } catch (error) {
@@ -100,7 +100,11 @@ module.exports = {
     }
 };
 
-function saveData(client) {
+async function saveData(client) {
     const dataDir = path.join(__dirname, '..', 'data');
-    fs.writeFileSync(path.join(dataDir, 'reactionRoles.json'), JSON.stringify(Object.fromEntries(client.reactionRoles), null, 2));
+    try {
+        await fs.promises.writeFile(path.join(dataDir, 'reactionRoles.json'), JSON.stringify(Object.fromEntries(client.reactionRoles), null, 2));
+    } catch (error) {
+        console.error('Error saving reaction role data:', error);
+    }
 }

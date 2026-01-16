@@ -44,7 +44,7 @@ module.exports = {
             };
 
             client.stickyMessages.set(channel.id, stickyData);
-            saveData(client);
+            await saveData(client);
 
             await interaction.reply({ content: `Sticky message created in ${channel}!`, ephemeral: true });
 
@@ -64,14 +64,18 @@ module.exports = {
             }
 
             client.stickyMessages.delete(channel.id);
-            saveData(client);
+            await saveData(client);
 
             await interaction.reply({ content: 'Sticky message deleted!', ephemeral: true });
         }
     }
 };
 
-function saveData(client) {
+async function saveData(client) {
     const dataDir = path.join(__dirname, '..', 'data');
-    fs.writeFileSync(path.join(dataDir, 'sticky.json'), JSON.stringify(Object.fromEntries(client.stickyMessages), null, 2));
+    try {
+        await fs.promises.writeFile(path.join(dataDir, 'sticky.json'), JSON.stringify(Object.fromEntries(client.stickyMessages), null, 2));
+    } catch (error) {
+        console.error('Error saving sticky data:', error);
+    }
 }

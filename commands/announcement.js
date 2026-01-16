@@ -69,7 +69,7 @@ module.exports = {
             };
 
             client.announcements.set(announcementMessage.id, announcementData);
-            saveData(client);
+            await saveData(client);
 
             await interaction.reply({ content: `Announcement created in ${channel}!`, ephemeral: true });
 
@@ -87,7 +87,7 @@ module.exports = {
                 await message.delete();
 
                 client.announcements.delete(messageId);
-                saveData(client);
+                await saveData(client);
 
                 await interaction.reply({ content: 'Announcement deleted!', ephemeral: true });
             } catch (error) {
@@ -115,7 +115,11 @@ module.exports = {
     }
 };
 
-function saveData(client) {
+async function saveData(client) {
     const dataDir = path.join(__dirname, '..', 'data');
-    fs.writeFileSync(path.join(dataDir, 'announcements.json'), JSON.stringify(Object.fromEntries(client.announcements), null, 2));
+    try {
+        await fs.promises.writeFile(path.join(dataDir, 'announcements.json'), JSON.stringify(Object.fromEntries(client.announcements), null, 2));
+    } catch (error) {
+        console.error('Error saving announcement data:', error);
+    }
 }

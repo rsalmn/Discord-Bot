@@ -86,7 +86,7 @@ module.exports = {
             };
 
             client.donations.set(message.id, donationData);
-            saveData(client);
+            await saveData(client);
 
             await interaction.reply({ content: `Donation message created! ID: ${message.id}`, ephemeral: true });
 
@@ -124,7 +124,7 @@ module.exports = {
             });
 
             client.donations.set(messageId, donationData);
-            saveData(client);
+            await saveData(client);
 
             try {
                 const channel = await client.channels.fetch(donationData.channelId);
@@ -165,7 +165,7 @@ module.exports = {
                 await message.delete();
 
                 client.donations.delete(messageId);
-                saveData(client);
+                await saveData(client);
 
                 await interaction.reply({ content: 'Donation message deleted!', ephemeral: true });
             } catch (error) {
@@ -192,7 +192,11 @@ module.exports = {
     }
 };
 
-function saveData(client) {
+async function saveData(client) {
     const dataDir = path.join(__dirname, '..', 'data');
-    fs.writeFileSync(path.join(dataDir, 'donations.json'), JSON.stringify(Object.fromEntries(client.donations), null, 2));
+    try {
+        await fs.promises.writeFile(path.join(dataDir, 'donations.json'), JSON.stringify(Object.fromEntries(client.donations), null, 2));
+    } catch (error) {
+        console.error('Error saving donation data:', error);
+    }
 }

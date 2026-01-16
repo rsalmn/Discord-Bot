@@ -58,7 +58,7 @@ module.exports = {
             };
 
             client.tickets.set(interaction.guild.id, ticketConfig);
-            saveData(client);
+            await saveData(client);
 
             await interaction.reply({ content: 'Ticket system has been set up!', ephemeral: true });
 
@@ -80,7 +80,11 @@ module.exports = {
     }
 };
 
-function saveData(client) {
+async function saveData(client) {
     const dataDir = path.join(__dirname, '..', 'data');
-    fs.writeFileSync(path.join(dataDir, 'tickets.json'), JSON.stringify(Object.fromEntries(client.tickets), null, 2));
+    try {
+        await fs.promises.writeFile(path.join(dataDir, 'tickets.json'), JSON.stringify(Object.fromEntries(client.tickets), null, 2));
+    } catch (error) {
+        console.error('Error saving ticket data:', error);
+    }
 }

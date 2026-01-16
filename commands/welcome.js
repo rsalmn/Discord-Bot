@@ -45,7 +45,7 @@ module.exports = {
             welcomeConfig.welcomeMessage = message;
 
             client.welcomeConfig.set(guildId, welcomeConfig);
-            saveData(client);
+            await saveData(client);
 
             await interaction.reply({ 
                 content: `Welcome message set!\n**Channel:** ${channel}\n**Message:** ${message}`, 
@@ -59,7 +59,7 @@ module.exports = {
             welcomeConfig.leaveMessage = message;
 
             client.welcomeConfig.set(guildId, welcomeConfig);
-            saveData(client);
+            await saveData(client);
 
             await interaction.reply({ 
                 content: `Leave message set!\n**Message:** ${message}`, 
@@ -68,14 +68,18 @@ module.exports = {
 
         } else if (subcommand === 'disable') {
             client.welcomeConfig.delete(guildId);
-            saveData(client);
+            await saveData(client);
 
             await interaction.reply({ content: 'Welcome/leave messages disabled!', ephemeral: true });
         }
     }
 };
 
-function saveData(client) {
+async function saveData(client) {
     const dataDir = path.join(__dirname, '..', 'data');
-    fs.writeFileSync(path.join(dataDir, 'welcome.json'), JSON.stringify(Object.fromEntries(client.welcomeConfig), null, 2));
+    try {
+        await fs.promises.writeFile(path.join(dataDir, 'welcome.json'), JSON.stringify(Object.fromEntries(client.welcomeConfig), null, 2));
+    } catch (error) {
+        console.error('Error saving welcome data:', error);
+    }
 }

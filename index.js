@@ -73,17 +73,21 @@ function loadData() {
 }
 
 // Save data to files
-function saveData() {
+async function saveData() {
     const dataDir = path.join(__dirname, 'data');
     
-    fs.writeFileSync(path.join(dataDir, 'giveaways.json'), JSON.stringify(Object.fromEntries(client.giveaways), null, 2));
-    fs.writeFileSync(path.join(dataDir, 'tickets.json'), JSON.stringify(Object.fromEntries(client.tickets), null, 2));
-    fs.writeFileSync(path.join(dataDir, 'welcome.json'), JSON.stringify(Object.fromEntries(client.welcomeConfig), null, 2));
-    fs.writeFileSync(path.join(dataDir, 'sticky.json'), JSON.stringify(Object.fromEntries(client.stickyMessages), null, 2));
-    fs.writeFileSync(path.join(dataDir, 'reactionRoles.json'), JSON.stringify(Object.fromEntries(client.reactionRoles), null, 2));
-    fs.writeFileSync(path.join(dataDir, 'announcements.json'), JSON.stringify(Object.fromEntries(client.announcements), null, 2));
-    fs.writeFileSync(path.join(dataDir, 'votes.json'), JSON.stringify(Object.fromEntries(client.votes), null, 2));
-    fs.writeFileSync(path.join(dataDir, 'donations.json'), JSON.stringify(Object.fromEntries(client.donations), null, 2));
+    try {
+        await fs.promises.writeFile(path.join(dataDir, 'giveaways.json'), JSON.stringify(Object.fromEntries(client.giveaways), null, 2));
+        await fs.promises.writeFile(path.join(dataDir, 'tickets.json'), JSON.stringify(Object.fromEntries(client.tickets), null, 2));
+        await fs.promises.writeFile(path.join(dataDir, 'welcome.json'), JSON.stringify(Object.fromEntries(client.welcomeConfig), null, 2));
+        await fs.promises.writeFile(path.join(dataDir, 'sticky.json'), JSON.stringify(Object.fromEntries(client.stickyMessages), null, 2));
+        await fs.promises.writeFile(path.join(dataDir, 'reactionRoles.json'), JSON.stringify(Object.fromEntries(client.reactionRoles), null, 2));
+        await fs.promises.writeFile(path.join(dataDir, 'announcements.json'), JSON.stringify(Object.fromEntries(client.announcements), null, 2));
+        await fs.promises.writeFile(path.join(dataDir, 'votes.json'), JSON.stringify(Object.fromEntries(client.votes), null, 2));
+        await fs.promises.writeFile(path.join(dataDir, 'donations.json'), JSON.stringify(Object.fromEntries(client.donations), null, 2));
+    } catch (error) {
+        console.error('Error saving data:', error);
+    }
 }
 
 // Load commands
@@ -106,7 +110,128 @@ for (const file of commandFiles) {
 client.once(Events.ClientReady, c => {
     console.log(`Ready! Logged in as ${c.user.tag}`);
     loadData();
+    checkExpiredGiveaways();
+    checkExpiredVotes();
 });
+
+// Listen for manual giveaway end events
+client.on('endGiveaway', (messageId) => {
+    endGiveaway(messageId, client);
+});
+
+// Listen for manual vote end events
+client.on('endVote', (messageId) => {
+    endVote(messageId, client);
+});
+
+// Check for expired giveaways on startup
+function checkExpiredGiveaways() {
+    const now = Date.now();
+    client.giveaways.forEach((giveaway, messageId) => {
+        if (!giveaway.ended && giveaway.endTime <= now) {
+            endGiveaway(messageId, client);
+        } else if (!giveaway.ended && giveaway.endTime > now) {
+            const timeLeft = giveaway.endTime - now;
+            setTimeout(() => endGiveaway(messageId, client), timeLeft);
+        }
+    });
+}
+
+// Check for expired votes on startup
+function checkExpiredVotes() {
+    const now = Date.now();
+    client.votes.forEach((vote, messageId) => {
+        if (vote.duration && !vote.ended) {
+            const endTime = vote.timestamp + (vote.duration * 60 * 1000);
+            if (endTime <= now) {
+                endVote(messageId, client);
+            } else {
+                const timeLeft = endTime - now;
+                setTimeout(() => endVote(messageId, client), timeLeft);
+            }
+        }
+    });
+}
+
+// End giveaway function
+async function endGiveaway(messageId, client) {
+    const giveaway = client.giveaways.get(messageId);
+    
+    if (!giveaway || giveaway.ended) return;
+
+    giveaway.ended = true;
+    client.giveaways.set(messageId, giveaway);
+
+    try {
+        const channel = await client.channels.fetch(giveaway.channelId);
+        const message = await channel.messages.fetch(messageId);
+
+        if (giveaway.participants.length === 0) {
+            await channel.send('Giveaway ended! No valid entries.');
+            return;
+        }
+
+        const winnerCount = Math.min(giveaway.winners, giveaway.participants.length);
+        const winners = [];
+        const participantsCopy = [...giveaway.participants];
+
+        for (let i = 0; i < winnerCount; i++) {
+            const randomIndex = Math.floor(Math.random() * participantsCopy.length);
+            winners.push(participantsCopy[randomIndex]);
+            participantsCopy.splice(randomIndex, 1);
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor('#00FF00')
+            .setTitle('🎉 GIVEAWAY ENDED 🎉')
+            .setDescription(`**Prize:** ${giveaway.prize}\n**Winners:** ${winners.map(w => `<@${w}>`).join(', ')}`)
+            .setTimestamp();
+
+        await message.edit({ embeds: [embed], components: [] });
+        await channel.send(`🎉 Congratulations ${winners.map(w => `<@${w}>`).join(', ')}! You won **${giveaway.prize}**!`);
+
+        await saveData();
+    } catch (error) {
+        console.error('Error ending giveaway:', error);
+    }
+}
+
+// End vote function
+async function endVote(messageId, client) {
+    const voteData = client.votes.get(messageId);
+    if (!voteData || voteData.ended) return;
+
+    voteData.ended = true;
+    client.votes.set(messageId, voteData);
+
+    try {
+        const channel = await client.channels.fetch(voteData.channelId);
+        const message = await channel.messages.fetch(messageId);
+
+        const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+        const results = [];
+
+        for (let i = 0; i < voteData.options.length; i++) {
+            const reaction = message.reactions.cache.get(emojis[i]);
+            const count = reaction ? reaction.count - 1 : 0;
+            results.push({ option: voteData.options[i], count });
+        }
+
+        results.sort((a, b) => b.count - a.count);
+
+        const embed = new EmbedBuilder()
+            .setColor('#00FF00')
+            .setTitle(`📊 ${voteData.question} - RESULTS`)
+            .setDescription(results.map(r => `**${r.option}**: ${r.count} vote(s)`).join('\n'))
+            .setFooter({ text: 'Vote ended' })
+            .setTimestamp();
+
+        await channel.send({ embeds: [embed] });
+        await saveData();
+    } catch (error) {
+        console.error('Error ending vote:', error);
+    }
+}
 
 // Handle interactions (slash commands and buttons)
 client.on(Events.InteractionCreate, async interaction => {
@@ -236,7 +361,7 @@ async function handleGiveawayButton(interaction, client) {
     }
 
     client.giveaways.set(messageId, giveaway);
-    saveData();
+    await saveData();
 }
 
 // Handle member join
@@ -328,20 +453,26 @@ client.on(Events.MessageCreate, async message => {
     const stickyData = client.stickyMessages.get(channelId);
     
     if (stickyData) {
-        try {
-            if (stickyData.messageId) {
-                const oldMessage = await message.channel.messages.fetch(stickyData.messageId).catch(() => null);
-                if (oldMessage) {
-                    await oldMessage.delete();
+        const now = Date.now();
+        
+        // Only repost sticky if 10 seconds have passed since last sticky post
+        if (!stickyData.lastPosted || now - stickyData.lastPosted > 10000) {
+            try {
+                if (stickyData.messageId) {
+                    const oldMessage = await message.channel.messages.fetch(stickyData.messageId).catch(() => null);
+                    if (oldMessage) {
+                        await oldMessage.delete();
+                    }
                 }
-            }
 
-            const newMessage = await message.channel.send(stickyData.content);
-            stickyData.messageId = newMessage.id;
-            client.stickyMessages.set(channelId, stickyData);
-            saveData();
-        } catch (error) {
-            console.error('Error handling sticky message:', error);
+                const newMessage = await message.channel.send(stickyData.content);
+                stickyData.messageId = newMessage.id;
+                stickyData.lastPosted = now;
+                client.stickyMessages.set(channelId, stickyData);
+                await saveData();
+            } catch (error) {
+                console.error('Error handling sticky message:', error);
+            }
         }
     }
 });
